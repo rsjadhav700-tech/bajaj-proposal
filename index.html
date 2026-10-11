@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bajaj Life eTouch II - Dynamic Multi-PDF Generator</title>
+
+<!-- PDF.js library to read text directly inside uploaded PDFs -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<!-- html2pdf bundle for programmatic, client-side single-click PDF generation -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+</script>
+
+<style>
+  * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { background: #f8fafc; margin: 0; padding: 20px; color: #0f172a; }
+  .app-container { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+  /* Control Panel & Dropzone */
+  .control-panel {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+  }
+  .control-panel h2 { margin-top: 0; color: #005691; font-size: 18px; border-bottom: 2px solid #005691; padding-bottom: 8px; }
+  
+  .drop-zone {
+    border: 2px dashed #0284c7;
+    background: #f0f9ff;
+    padding: 20px;
+    text-align: center;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-bottom: 12px;
+  }
+  .drop-zone:hover { background: #e0f2fe; }
+  .drop-zone p { margin: 4px 0; font-size: 13px; font-weight: 700; color: #0369a1; }
+  .drop-zone span { font-size: 11px; color: #64748b; }
+
+  .status-log {
+    font-size: 11px;
+    background: #f1f5f9;
+    border-left: 3.5px solid #005691;
+    padding: 8px 12px;
+    margin-bottom: 16px;
+    border-radius: 0 4px 4px 0;
+  }
+
+  .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group label { font-size: 11px; font-weight: 600; color: #475569; }
+  .form-group input { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; }
+
+  .btn-bar { display: flex; gap: 10px; margin-top: 14px; }
+  .btn { padding: 8px 16px; border: none; border-radius: 4px; font-weight: 700; cursor: pointer; font-size: 12px; }
+  .btn-primary { background: #005691; color: white; }
+  .btn-success { background: #16a34a; color: white; }
+  .btn-danger { background: #e11d48; color: white; }
+
+  /* Printable Proposal Canvas */
+  #proposal-canvas {
+    background: #ffffff;
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    padding: 6mm 8mm;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    font-size: 7.6px;
+    line-height: 1.18;
+    color: #1e293b;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .header-table { width: 100%; border-bottom: 2px solid #005691; padding-bottom: 2px; margin-bottom: 3px; }
+  .brand-title { font-size: 15px; font-weight: 800; color: #005691; margin: 0; }
+  .brand-sub { font-size: 8px; font-weight: 600; color: #475569; margin: 1px 0 0 0; }
+  .doc-tag { text-align: right; font-size: 7.2px; color: #64748b; text-transform: uppercase; }
+  .plan-name { font-size: 9.5px; font-weight: 800; color: #005691; }
+  .section-title {
+    background-color: #f1f5f9;
+    border-left: 3.5px solid #005691;
+    padding: 2px 4px;
+    font-size: 8px;
+    font-weight: 700;
+    color: #005691;
+    margin: 3px 0 2px 0;
+    text-transform: uppercase;
+  }
+  .info-grid { width: 100%; border-collapse: collapse; margin-bottom: 2px; }
+  .info-grid td { padding: 2px 3.5px; border: 1px solid #e2e8f0; font-size: 7.3px; vertical-align: middle; }
+  .info-label { background-color: #f8fafc; font-weight: 600; color: #475569; width: 20%; }
+  .info-val { font-weight: 700; color: #0f172a; }
+  
+  .data-table { width: 100%; border-collapse: collapse; margin: 2px 0; font-size: 7px; }
+  .data-table th { background-color: #005691; color: #ffffff; padding: 2.5px 2px; font-weight: 700; text-align: left; border: 1px solid #005691; }
+  .data-table td { padding: 2px 2px; border: 1px solid #cbd5e1; }
+  .data-table tr:nth-child(even) { background-color: #f8fafc; }
+  .highlight-row-1 { background-color: #dcfce7 !important; font-weight: 700; }
+  .highlight-row-2 { background-color: #e0f2fe !important; font-weight: 700; }
+  .text-right { text-align: right; }
+  .badge { display: inline-block; padding: 0.5px 3px; font-size: 6px; font-weight: 700; border-radius: 2px; color: #fff; }
+  .badge-green { background: #16a34a; }
+  .badge-blue { background: #0284c7; }
+  
+  .why-buy-table { width: 100%; border-collapse: collapse; margin: 2px 0; }
+  .why-buy-table td { vertical-align: top; padding: 2.5px 4.5px; }
+  .why-buy-box-green { background: #f0fdf4; border: 1.2px solid #86efac; padding: 3px 5px; border-radius: 3px; }
+  .why-buy-box-blue { background: #eff6ff; border: 1.2px solid #93c5fd; padding: 3px 5px; border-radius: 3px; }
+  .why-buy-title { font-size: 7.8px; font-weight: 800; margin-bottom: 1.5px; }
+  .why-buy-list { margin: 1px 0 0 0; padding-left: 12px; font-size: 6.8px; line-height: 1.16; }
+
+  .wellness-box { background: #fafaf9; border: 1.2px solid #e7e5e4; border-radius: 3px; padding: 2.5px 4px; margin: 2px 0; }
+  .wellness-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e7e5e4; padding-bottom: 1.5px; margin-bottom: 1.5px; }
+  .wellness-header h3 { margin: 0; font-size: 7.8px; color: #005691; font-weight: 800; }
+  .wellness-pill { background: #16a34a; color: #fff; padding: 0.5px 4px; border-radius: 5px; font-size: 6.2px; font-weight: 700; }
+  .wellness-table { width: 100%; border-collapse: collapse; font-size: 6.7px; }
+  .wellness-table td { padding: 1.6px 2.2px; border: 1px solid #e7e5e4; }
+  .wellness-table th { background: #f5f5f4; color: #44403c; font-weight: 700; padding: 1.6px 2.2px; text-align: left; }
+  .footer { margin-top: 3px; border-top: 1px solid #cbd5e1; padding-top: 2px; font-size: 6px; color: #64748b; line-height: 1.12; }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  <div class="control-panel">
+    <h2>Dynamic Proposal Generator (Upload 1 to 5 Quote PDFs)</h2>
+
+    <!-- Dynamic Drag & Drop Upload Zone -->
+    <div class="drop-zone" onclick="document.getElementById('fileInput').click()">
+      <input type="file" id="fileInput" multiple accept=".pdf" style="display:none" onchange="handleFiles(this.files)">
+      <p>📂 Drag &amp; Drop 1, 2, 3, 4, or 5 Bajaj Quote PDFs Here (or Click to Browse)</p>
+      <span>The proposal dynamically formats and calculates based only on the uploaded files</span>
+    </div>
+
+    <div class="status-log" id="statusLog">Ready. Upload any number of quotation PDFs above.</div>
+
+    <!-- Client Header Form -->
+    <div class="form-row">
+      <div class="form-group">
+        <label>Client Name</label>
+        <input type="text" id="custName" value="Valued Customer">
+      </div>
+      <div class="form-group">
+        <label>Age</label>
+        <input type="number" id="custAge" value="45">
+      </div>
+      <div class="form-group">
+        <label>Profile / Gender</label>
+        <input type="text" id="custProfile" value="Male (Non-Tobacco)">
+      </div>
+      <div class="form-group">
+        <label>Sum Assured (₹)</label>
+        <input type="text" id="custSA" value="1,00,00,000">
+      </div>
+    </div>
+
+    <div class="btn-bar">
+      <button class="btn btn-primary" onclick="renderDynamicProposal()">Refresh Calculations</button>
+      <button class="btn btn-success" onclick="downloadPDF()">Download Single-Page PDF</button>
+      <button class="btn btn-danger" onclick="clearAllData()">Reset / Clear Uploads</button>
+    </div>
+  </div>
+
+  <!-- DYNAMIC PROPOSAL CANVAS -->
+  <div id="proposal-canvas">
+    <table class="header-table">
+      <tr>
+        <td style="width: 65%;">
+          <h1 class="brand-title">BAJAJ LIFE INSURANCE</h1>
+          <p class="brand-sub">eTouch II - Individual Life Insurance Term Plan (UIN: 116N198V10)</p>
+        </td>
+        <td class="doc-tag" style="width: 35%;">
+          <span class="plan-name">PLAN: LIFE SHIELD PLUS</span><br>
+          OFFICIAL PROPOSAL &amp; VALUE-ADD MATRIX
+        </td>
+      </tr>
+    </table>
+
+    <div class="section-title">1. Policyholder &amp; Core Risk Cover Details</div>
+    <table class="info-grid">
+      <tr>
+        <td class="info-label">Life Assured:</td>
+        <td class="info-val" id="disp_name">Valued Customer</td>
+        <td class="info-label">Pure Life Cover (SA):</td>
+        <td class="info-val" id="disp_sa">₹1,00,00,000 (Pure Protection)</td>
+      </tr>
+      <tr>
+        <td class="info-label">Age &amp; Profile:</td>
+        <td class="info-val" id="disp_age_prof">45 Yrs | Male (Non-Tobacco)</td>
+        <td class="info-label">Policy Term (PT):</td>
+        <td class="info-val" id="disp_pt">40 Years (Protection Guaranteed to Age 85)</td>
+      </tr>
+      <tr>
+        <td class="info-label">Underwriting Class:</td>
+        <td class="info-val">Medical Category</td>
+        <td class="info-label">Comprehensive Benefits:</td>
+        <td class="info-val">Death + ADB + TI + ATPD Rider + Health Management (HMS)</td>
+      </tr>
+    </table>
+
+    <div class="section-title">2. Payout Protection &amp; Risk Benefits</div>
+    <table class="info-grid">
+      <tr>
+        <td class="info-label" style="width:23%;">Natural Death Cover:</td>
+        <td style="font-size:7px; width:27%;"><strong>₹1,00,00,000</strong> tax-free lump sum to nominee on demise due to illness/natural cause.</td>
+        <td class="info-label" style="width:23%;">Accidental Death Cover:</td>
+        <td style="font-size:7px; width:27%;"><strong>₹2,00,00,000 Total</strong> (₹1 Cr base + ₹1 Cr built-in ADB lump sum under Life Shield Plus).</td>
+      </tr>
+      <tr>
+        <td class="info-label">Terminal Illness (TI):</td>
+        <td style="font-size:7px;"><strong>₹1,00,00,000</strong> accelerated advance payout immediately upon medical diagnosis.</td>
+        <td class="info-label">ATPD Rider &amp; Free WOP:</td>
+        <td style="font-size:7px;"><strong>₹1.00 Cr</strong> disability sum assured + 100% future base premiums waived while full cover stays active.</td>
+      </tr>
+    </table>
+
+    <div class="section-title">3. Premium Payment Options, Outflow &amp; Total Savings (Cover to Age 85)</div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Payment Structure &amp; Quotation</th>
+          <th class="text-right">Base Prem (Yr 1 / Ren)</th>
+          <th class="text-right">Rider Prem / Yr</th>
+          <th class="text-right">Total Prem 1st Yr (Inc. Rider)</th>
+          <th class="text-right">Total Prem 2nd Yr+ (Inc. Rider)</th>
+          <th class="text-right">Total Cash Flow with Rider</th>
+          <th class="text-right">Total Premium Savings</th>
+        </tr>
+      </thead>
+      <tbody id="comparison-tbody"></tbody>
+    </table>
+
+    <div class="section-title" id="decision_sec_title">4. Strategic Decision Analysis: Why This Plan Is the Smartest Financial Move</div>
+    <table class="why-buy-table" id="decision_container"></table>
+
+    <div class="wellness-box">
+      <div class="wellness-header">
+        <h3>5. HEALTH MANAGEMENT SERVICES (HMS) &amp; WELLNESS ECOSYSTEM — EXACT BENEFIT VALUES</h3>
+        <span class="wellness-pill">DAY-TO-DAY VALUE: UP TO ₹65,000 / YEAR</span>
+      </div>
+      <table class="wellness-table">
+        <thead>
+          <tr>
+            <th>Service Feature</th>
+            <th>Coverage &amp; Annual Frequency</th>
+            <th>Exact Benefit Calculation Across Uploaded Options</th>
+            <th>Direct Benefit / Out-of-Pocket Savings</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="background:#f0fdf4;">
+            <td><strong>Health &amp; Wellness Wallet</strong></td>
+            <td>100% of Annual Rider Premium split: 50% In-Clinic Doctors + 50% Labs/Radiology</td>
+            <td id="disp_wallet_splits"></td>
+            <td><strong>Cash Vouchers:</strong> ₹500 per General Physician visit • ₹1,000 per Specialist visit • ₹1,000 per Lab test</td>
+          </tr>
+          <tr>
+            <td><strong>Preventive Health Check-Up</strong></td>
+            <td>1 Full Comprehensive Health Check-Up Package per year</td>
+            <td>Standard Clinical Value: <strong>₹3,500 / year</strong></td>
+            <td><strong>100% Free</strong> — Annual diagnostic tests for early detection &amp; prevention</td>
+          </tr>
+          <tr>
+            <td><strong>Doctor Tele-Consultations</strong></td>
+            <td>Assumed 3 sessions/month = 36 consultations per year with general physicians</td>
+            <td>36 sessions × ₹500 / session = <strong>₹18,000 / year</strong></td>
+            <td><strong>Unlimited 24/7 Digital Access</strong> for quick home care &amp; medical advice</td>
+          </tr>
+          <tr>
+            <td><strong>Diet &amp; Nutrition Coach</strong></td>
+            <td>Assumed 1 session/month = 12 consultations per year with lifestyle coaches</td>
+            <td>12 sessions × ₹500 / session = <strong>₹6,000 / year</strong></td>
+            <td><strong>Personalized Diet &amp; Nutrition Plans</strong> tailored to your health goals</td>
+          </tr>
+          <tr>
+            <td><strong>Emotional Wellness Consults</strong></td>
+            <td>Assumed 1 session/month = 12 consultations per year with licensed psychologists</td>
+            <td>12 sessions × ₹500 / session = <strong>₹6,000 / year</strong></td>
+            <td><strong>Confidential Professional Counseling</strong> for mental health &amp; stress management</td>
+          </tr>
+          <tr>
+            <td><strong>Network Discounts</strong></td>
+            <td>Year-round discounts across partner pharmacy, lab &amp; hospital networks</td>
+            <td>10% off Medicines (₹500) + 10% off Labs (₹500) + 5% off In-Patient (₹500) = <strong>₹1,500 / year</strong></td>
+            <td><strong>Direct Discounts</strong> on everyday medicine purchases and diagnostic tests</td>
+          </tr>
+          <tr>
+            <td><strong>Live Healthy Rewards</strong></td>
+            <td>Track daily steps, complete Health Assessments &amp; log health goals on Bajaj Life App</td>
+            <td>Earn up to 30,000 Health Coins = <strong>₹30,000 / year</strong></td>
+            <td><strong>Redeemable for Cash Vouchers</strong>, medical tests, and lifestyle products</td>
+          </tr>
+          <tr style="background:#e0f2fe; font-weight:700; color:#0369a1;">
+            <td colspan="2">TOTAL ANNUAL WELLNESS &amp; HEALTH BENEFIT VALUE</td>
+            <td colspan="2" class="text-right">₹35,000 (Direct Services &amp; Discounts) + ₹30,000 (Live Healthy Rewards) = UP TO ₹65,000 / YEAR</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section-title">6. Guaranteed Early Exit Value (100% Base Refund Option)</div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Payment Structure</th>
+          <th>Exit Window (Policy Years)</th>
+          <th>Attained Age Range</th>
+          <th class="text-right">100% Guaranteed Base Premium Refund</th>
+        </tr>
+      </thead>
+      <tbody id="exit-tbody"></tbody>
+    </table>
+
+    <div class="footer">
+      <strong>Terms &amp; Statutory Disclaimers:</strong> Proposal prepared exclusively for <span id="disp_footer_name">client</span> using official Bajaj Life eTouch II illustrations (UIN: 116N198V10) and Accidental Permanent Total/Partial Disability Benefit Rider II (UIN: 116B064V01). Premiums exclude applicable GST. Premiums qualify for tax deductions under Sec 80C and 80D, and claim payouts are 100% tax-free under Sec 10(10D) as per prevailing income tax rules. HMS waiting period is 30 days; benefits cease during grace period.<br>
+      <strong>Bajaj Life Insurance Limited</strong> | Reg. Office: Bajaj Insurance House, Airport Rd, Yerawada, Pune - 411006. IRDAI Reg. No. 116.
+    </div>
+  </div>
+</div>
+
+<script>
+// Global container holding parsed PDF records
+let uploadedOptions = [];
+
+async function handleFiles(files) {
+  if (!files || files.length === 0) return;
+  const log = document.getElementById("statusLog");
+  log.innerText = `Reading ${files.length} uploaded PDF(s)...`;
+
+  for (let file of files) {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      
+      let fullText = "";
+      for (let i = 1; i <= Math.min(pdf.numPages, 7); i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        fullText += textContent.items.map(s => s.str).join(" ") + " ";
+      }
+      parseAndStorePDF(fullText);
+    } catch (err) {
+      console.error(err);
+      log.innerText = `Error parsing ${file.name}: ${err.message}`;
+    }
+  }
+
+  log.innerText = `Processed ${uploadedOptions.length} valid quote option(s). Rendered live below.`;
+  renderDynamicProposal();
+}
+
+function parseAndStorePDF(text) {
+  // Extract Quote Number
+  const qMatch = text.match(/Quotation No[:\s]+(\d+)/i) || text.match(/(\b60108\d{6}\b)/);
+  const quoteNo = qMatch ? qMatch[1] : "";
+
+  // Extract Customer Name
+  const nameMatch = text.match(/Name of the Life Assured[:\s]+([A-Za-z\s]+?)(Unique|Age|Tobacco|Policy)/i) || text.match(/Hi\s+([A-Za-z\s\.]+),/i);
+  if (nameMatch && nameMatch[1]) {
+    document.getElementById("custName").value = nameMatch[1].trim();
+  }
+
+  // Extract Age
+  const ageMatch = text.match(/Age\s*\(Years\)[:\s]+(\d+)/i) || text.match(/Age\s*→\s*(\d+)/i);
+  if (ageMatch && ageMatch[1]) {
+    document.getElementById("custAge").value = parseInt(ageMatch[1].trim());
+  }
+
+  // Extract Gender
+  const genderMatch = text.match(/Life Assured's Gender[:\s]+(Male|Female)/i);
+  if (genderMatch) {
+    document.getElementById("custProfile").value = `${genderMatch[1]} (Non-Tobacco)`;
+  }
+
+  // Extract PPT
+  const pptMatch = text.match(/Premium Payment Term\s*\(Years\)[:\s]+(\d+)/i) || text.match(/Premium Payment Term@?\s*\((\d+)\s*years\)/i);
+  const ppt = pptMatch ? parseInt(pptMatch[1]) : 0;
+
+  // Extract Premiums
+  const b1Match = text.match(/Instalment Premium without GST after discounts[,\s\w]*?(\d[\d,]+)/i);
+  const b2Match = text.match(/Instalment Premium Second Year Onwards\s+([\d,]+)/i);
+  const riderMatch = text.match(/Rider Premium\s+([\d,]+)/i) || text.match(/Premium:\s*Rs\.\s*([\d,]+)\s*Yearly/i);
+  const exitMatch = text.match(/Early Exit Value[\s\w]*?(\d[\d,]+)/i);
+
+  const cleanNum = (str) => str ? parseInt(str.replace(/,/g, '')) : 0;
+
+  const item = {
+    quote: quoteNo,
+    ppt: ppt,
+    b1: cleanNum(b1Match ? b1Match[1] : 0),
+    b2: cleanNum(b2Match ? b2Match[1] : 0),
+    rider: cleanNum(riderMatch ? riderMatch[1] : 0),
+    exit: cleanNum(exitMatch ? exitMatch[1] : 0)
+  };
+
+  // Avoid duplicate PPT entries
+  uploadedOptions = uploadedOptions.filter(o => o.ppt !== ppt);
+  uploadedOptions.push(item);
+  uploadedOptions.sort((a, b) => a.ppt - b.ppt);
+}
+
+function clearAllData() {
+  uploadedOptions = [];
+  document.getElementById("statusLog").innerText = "All uploaded data cleared. Drag & drop new PDFs anytime.";
+  renderDynamicProposal();
+}
+
+function fmt(num) {
+  return "₹" + Number(num).toLocaleString('en-IN');
+}
+
+function renderDynamicProposal() {
+  const name = document.getElementById("custName").value;
+  const age = parseInt(document.getElementById("custAge").value) || 45;
+  const profile = document.getElementById("custProfile").value;
+  const sa = document.getElementById("custSA").value;
+  const pt = 85 - age;
+
+  document.getElementById("disp_name").innerText = name;
+  document.getElementById("disp_footer_name").innerText = name;
+  document.getElementById("disp_sa").innerText = "₹" + sa + " Pure Protection";
+  document.getElementById("disp_age_prof").innerText = `${age} Yrs | ${profile}`;
+  document.getElementById("disp_pt").innerText = `${pt} Years (Protection Guaranteed to Age 85)`;
+
+  const compTbody = document.getElementById("comparison-tbody");
+  const exitTbody = document.getElementById("exit-tbody");
+  const walletCell = document.getElementById("disp_wallet_splits");
+  const decisionContainer = document.getElementById("decision_container");
+
+  // Fallback defaults if no files uploaded yet
+  let list = uploadedOptions.length > 0 ? uploadedOptions : [
+    { quote: "60108365783", ppt: 5, b1: 194283, b2: 215271, rider: 17069, exit: 1055368 },
+    { quote: "60108365801", ppt: 10, b1: 104204, b2: 115461, rider: 8532, exit: 1143353 },
+    { quote: "60108365817", ppt: 15, b1: 79621, b2: 88223, rider: 6253, exit: 1314743 },
+    { quote: "60108365839", ppt: 20, b1: 68858, b2: 76298, rider: 5299, exit: 1518511 },
+    { quote: "60108365855", ppt: pt, b1: 50715, b2: 56194, rider: 4495, exit: 1455565 }
+  ];
+
+  // Identify baseline (Regular Pay or highest PPT)
+  const baselineItem = list.find(o => o.ppt >= pt) || list[list.length - 1];
+  const baselineOutflow = (baselineItem.b1 + baselineItem.rider) + ((baselineItem.b2 + baselineItem.rider) * (baselineItem.ppt - 1));
+
+  let compHtml = "";
+  let exitHtml = "";
+  let walletHtml = "";
+
+  list.forEach((opt, idx) => {
+    const isRegular = opt.ppt >= pt;
+    const is5Pay = opt.ppt === 5;
+    const is10Pay = opt.ppt === 10;
+
+    let badge = "";
+    let rowClass = "";
+    if (is5Pay) { badge = `<span class="badge badge-green">MAX SAVINGS</span>`; rowClass = "highlight-row-1"; }
+    else if (is10Pay) { badge = `<span class="badge badge-blue">RECOMMENDED</span>`; rowClass = "highlight-row-2"; }
+
+    const t1 = opt.b1 + opt.rider;
+    const t2 = opt.b2 + opt.rider;
+    const totalOutflow = t1 + (t2 * (opt.ppt - 1));
+    const savings = baselineOutflow - totalOutflow;
+    const savingsPct = baselineOutflow > 0 ? ((savings / baselineOutflow) * 100).toFixed(2) : "0.00";
+
+    const label = isRegular ? `${pt}-Year Regular Pay` : `${opt.ppt}-Year Limited Pay`;
+    const subLabel = isRegular ? `Pay till Age 85` : `Done by Age ${age + opt.ppt}`;
+
+    // Comparison row
+    compHtml += `
+      <tr class="${rowClass}">
+        <td>
+          <strong>${label}</strong> ${badge}<br>
+          <span style="font-size:6px; color:#475569;">Quote: ${opt.quote} (${subLabel})</span>
+        </td>
+        <td class="text-right">${fmt(opt.b1)} / ${fmt(opt.b2)}</td>
+        <td class="text-right">${fmt(opt.rider)}</td>
+        <td class="text-right"><strong>${fmt(t1)}</strong></td>
+        <td class="text-right">${fmt(t2)}</td>
+        <td class="text-right"><strong>${fmt(totalOutflow)}</strong></td>
+        <td class="text-right">${
+          list.length === 1 
+            ? "Primary Cover" 
+            : (opt === baselineItem 
+                ? "Baseline (Maximum Cost)" 
+                : `<strong style="color:${is5Pay ? '#15803d' : '#0369a1'};">${fmt(savings)} (${savingsPct}%)</strong>`)
+        }</td>
+      </tr>
+    `;
+
+    // Exit row
+    const exitWindow = `Policy Years 26 to ${pt - 5} (${Math.max(1, pt - 30)}-Year Window)`;
+    const exitAgeRange = `Age ${age + 25} to 80`;
+    exitHtml += `
+      <tr class="${rowClass}">
+        <td><strong>${label}</strong></td>
+        <td>${exitWindow}</td>
+        <td>${exitAgeRange}</td>
+        <td class="text-right"><strong>${fmt(opt.exit)}</strong> ${isRegular ? '(Base Premiums to Date)' : '(100% Base Refund)'}</td>
+      </tr>
+    `;
+
+    // Health Wallet line
+    walletHtml += `<strong>${opt.ppt}-Pay:</strong> ${fmt(opt.rider)}/yr (${fmt(opt.rider/2)} Doctors + ${fmt(opt.rider/2)} Labs)<br>`;
+  });
+
+  compTbody.innerHTML = compHtml;
+  exitTbody.innerHTML = exitHtml;
+  walletCell.innerHTML = walletHtml;
+
+  // Render Strategic Decision pitch boxes dynamically based on available options
+  let decisionHtml = "<tr>";
+  const opt5 = list.find(o => o.ppt === 5);
+  const opt10 = list.find(o => o.ppt === 10);
+
+  if (opt5) {
+    const outflow5 = (opt5.b1 + opt5.rider) + ((opt5.b2 + opt5.rider) * 4);
+    const sav5 = baselineOutflow - outflow5;
+    decisionHtml += `
+      <td style="width:${opt10 ? '50%' : '100%'}">
+        <div class="why-buy-box-green">
+          <div class="why-buy-title" style="color:#15803d;">★ 5-YEAR LIMITED PAY (MAX SAVINGS CHOICE)</div>
+          <ul class="why-buy-list">
+            ${baselineOutflow > outflow5 ? `<li><strong>Keep ${fmt(sav5)} in Your Pocket:</strong> Slashes total outflow by nearly half vs long-term payment options.</li>` : ''}
+            <li><strong>Debt-Free by Age ${age + 5}:</strong> Finish all commitments in just 5 short years during peak earning. Enjoy <strong>${pt - 5} years of zero premium liability</strong> with full ₹${sa} protection up to Age 85.</li>
+            <li><strong>Highest Annual Healthcare Wallet:</strong> Receive ${fmt(opt5.rider)}/year for doctor visits and diagnostic lab vouchers.</li>
+            <li><strong>100% Capital Recovery Safety Net:</strong> Surrender between Age ${age + 25}–80 to instantly receive <strong>${fmt(opt5.exit)} (100% base premiums paid)</strong> back in cash.</li>
+          </ul>
+        </div>
+      </td>
+    `;
+  }
+
+  if (opt10) {
+    const outflow10 = (opt10.b1 + opt10.rider) + ((opt10.b2 + opt10.rider) * 9);
+    const sav10 = baselineOutflow - outflow10;
+    const m10 = Math.round((opt10.b1 + opt10.rider) / 12);
+    decisionHtml += `
+      <td style="width:${opt5 ? '50%' : '100%'}">
+        <div class="why-buy-box-blue">
+          <div class="why-buy-title" style="color:#0369a1;">★ 10-YEAR LIMITED PAY (RECOMMENDED OPTIMAL CHOICE)</div>
+          <ul class="why-buy-list">
+            <li><strong>Comfortable Monthly Cash Flow:</strong> Outlay of just <strong>${fmt(m10)}/month</strong> in Year 1${baselineOutflow > outflow10 ? `, while still saving ${fmt(sav10)}` : ''}.</li>
+            <li><strong>Finish All Premiums by Age ${age + 10}:</strong> Wrap up commitments well ahead of retirement. Enjoy ${pt - 10} years of completely free protection till Age 85.</li>
+            <li><strong>Protection Against Senior-Age Policy Lapses:</strong> In 10-Pay, your cover is permanent and paid-up by Age ${age + 10}, protecting against senior-age lapses.</li>
+            <li><strong>Exceptional Health Value:</strong> Receive up to ₹65,000/yr in health perks and rewards for an annual rider premium of just ${fmt(opt10.rider)}/yr.</li>
+          </ul>
+        </div>
+      </td>
+    `;
+  }
+
+  // If neither 5-pay nor 10-pay was uploaded, summarize the primary uploaded plan
+  if (!opt5 && !opt10 && list.length > 0) {
+    const top = list[0];
+    const topOutflow = (top.b1 + top.rider) + ((top.b2 + top.rider) * (top.ppt - 1));
+    decisionHtml += `
+      <td style="width:100%">
+        <div class="why-buy-box-blue">
+          <div class="why-buy-title" style="color:#0369a1;">★ ${top.ppt}-YEAR PAYMENT STRUCTURE</div>
+          <ul class="why-buy-list">
+            <li><strong>Predictable Budgeting:</strong> Fixed commitment of ${fmt(top.b1 + top.rider)} in Yr 1, then ${fmt(top.b2 + top.rider)}/yr.</li>
+            <li><strong>Guaranteed Coverage to Age 85:</strong> Complete financial security with unbroken ₹${sa} protection.</li>
+            <li><strong>100% Base Refund Option:</strong> Walk away between Age ${age + 25}–80 and receive ${fmt(top.exit)} back.</li>
+          </ul>
+        </div>
+      </td>
+    `;
+  }
+
+  decisionHtml += "</tr>";
+  decisionContainer.innerHTML = decisionHtml;
+}
+
+function downloadPDF() {
+  renderDynamicProposal();
+  const element = document.getElementById('proposal-canvas');
+  const name = document.getElementById("custName").value.replace(/\s+/g, '_');
+  const opt = {
+    margin:       [3, 5, 3, 5],
+    filename:     `Bajaj_Life_Proposal_${name}.pdf`,
+    image:        { type: 'jpeg', quality: 0.98 },
+    html2canvas:  { scale: 2, useCORS: true, logging: false },
+    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
+  html2pdf().set(opt).from(element).save();
+}
+
+window.onload = renderDynamicProposal;
+</script>
+
+</body>
+</html>
